@@ -131,7 +131,7 @@ contract Wallet is Ownable {
     //     return ecrecover(hash, v, r, s);
     // }
 
-    function verify(string memory raw) public view returns (uint success) {
+    function verify(string memory raw) public view returns (uint success, string memory) {
         Headers memory headers;
         strings.slice memory body;
         Status memory status;
@@ -168,9 +168,9 @@ contract Wallet is Ownable {
         return (successCount, body);
     }
 
-    function changeKey(bytes calldata msg) external returns (bool) {
-        owner = verifyDKIM(msg, sign);
-    }
+    // function changeKey(bytes calldata msg) external returns (bool) {
+    //     owner = verifyDKIM(msg, sign);
+    // }
 
     function verifyDKIM(bytes calldata msg) internal returns (address) {
         string publickey; //公钥 
@@ -182,34 +182,23 @@ contract Wallet is Ownable {
         
         (success, bodytemp) = verify(raw);
 
-        body = string(bodytemp);
+        body = bytes(bodytemp);
 
         if(success == 1) {
-            (publickey, aaaddress, nonce) = splitbodytest(body);
-            return address(aaaddress);
+            (publickey, aaaddress, nonce) = splitbody(body);
+            // 验证publickey、nonce等值
+            // return address(0x0);
         } else {
             return address(0x0);
         }
+
     }
 
-    function splitbodytext(string memory body) external returns (string publickey, string aaaddress, string nonce) { //分割body
-        string publickey;
-        string aaaddress;
-        string nonce;
-        
-        publickey = substring(body, 0, 34);
-        aaaddress = substring(body, 34, 68);
-        nonce = substring(body, 68, 72);
-        return;
-    }
-
-    function substring(string memory str, uint startIndex, uint endIndex) public pure returns (string memory) {
-        bytes memory strBytes = bytes(str);
-        bytes memory result = new bytes(endIndex-startIndex);
-        for(uint i = startIndex; i < endIndex; i++) {
-            result[i-startIndex] = strBytes[i];
-        }
-        return string(result);
+    function splitbody(
+        bytes memory body
+        ) external returns (string memory publickey, string aaaddress, uint nonce) { //分割body
+        (publickey, aaaddress, nonce) = abi.decode(body);
+        return (publickey, aaaddress, nonce);
     }
 
     function verifyBodyHash(strings.slice memory body, SigTags memory sigTags) internal pure returns (Status memory) {
