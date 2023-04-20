@@ -34,7 +34,8 @@
  *      corresponding to the left and right parts of the string.
  */
 
-pragma solidity ^0.4.14;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.17;
 
 library strings {
     struct slice {
@@ -42,9 +43,9 @@ library strings {
         uint _ptr;
     }
 
-    function memcpy(uint dest, uint src, uint len) private pure {
+    function memcpy(uint dest, uint src, uint len1) private pure {
         // Copy word-length chunks while possible
-        for(; len >= 32; len -= 32) {
+        for(; len1 >= 32; len1 -= 32) {
             assembly {
                 mstore(dest, mload(src))
             }
@@ -53,7 +54,7 @@ library strings {
         }
 
         // Copy remaining bytes
-        uint mask = 256 ** (32 - len) - 1;
+        uint mask = 256 ** (32 - len1) - 1;
         assembly {
             let srcpart := and(mload(src), not(mask))
             let destpart := and(mload(dest), mask)
@@ -83,23 +84,23 @@ library strings {
         uint ret;
         if (self == 0)
             return 0;
-        if (self & 0xffffffffffffffffffffffffffffffff == 0) {
+        if (self & bytes16(0xffffffffffffffffffffffffffffffff) == 0) { //把 uint256 类型的最大值type(uint256).max转换为bytes32类型进行位与运算
             ret += 16;
             self = bytes32(uint(self) / 0x100000000000000000000000000000000);
         }
-        if (self & 0xffffffffffffffff == 0) {
+        if (self & bytes8(0xffffffffffffffff) == 0) {
             ret += 8;
             self = bytes32(uint(self) / 0x10000000000000000);
         }
-        if (self & 0xffffffff == 0) {
+        if (self & bytes4(0xffffffff) == 0) {
             ret += 4;
             self = bytes32(uint(self) / 0x100000000);
         }
-        if (self & 0xffff == 0) {
+        if (self & bytes2(0xffff) == 0) {
             ret += 2;
             self = bytes32(uint(self) / 0x10000);
         }
-        if (self & 0xff == 0) {
+        if (self & bytes1(0xff) == 0) {
             ret += 1;
         }
         return 32 - ret;
@@ -211,7 +212,7 @@ library strings {
             }
             if (a != b) {
                 // Mask out irrelevant bytes and check again
-                uint256 mask = uint256(-1); // 0xffff...
+                uint256 mask = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff; // uint(-1)
                 if(shortest < 32) {
                   mask = ~(2 ** (8 * (32 - shortest + idx)) - 1);
                 }
@@ -695,7 +696,8 @@ library strings {
             return "";
 
         uint length = self._len * (parts.length - 1);
-        for(uint i = 0; i < parts.length; i++)
+        uint i;
+        for(i = 0; i < parts.length; i++)
             length += parts[i]._len;
 
         string memory ret = new string(length);
