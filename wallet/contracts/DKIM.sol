@@ -116,10 +116,8 @@ contract DKIM {
         SigTags memory sigTags,
         strings.slice memory signature
     ) internal view returns (Status memory) {
-        bytes memory modulus = "cfb0520e4ad78c4adb0deb5e605162b6469349fc1fde9269b88d596ed9f3735c00c592317c982320874b987bcc38e8556ac544bdee169b66ae8fe639828ff5afb4f199017e3d8e675a077f21cd9e5c526c1866476e7ba74cd7bb16a1c3d93bc7bb1d576aedb4307c6b948d5b8c29f79307788d7a8ebf84585bf53994827c23a5";
-        bytes memory exponent = "65537";
        
-        //(bytes memory modulus, bytes memory exponent) = oracle.getRSAKey(sigTags.d.toString(), sigTags.s.toString());
+        (bytes memory modulus, bytes memory exponent) = oracle.getRSAKey(sigTags.d.toString(), sigTags.s.toString());
         //通过body+header一起计算哈希与signuature进行验证。
         if (modulus.length == 0 || exponent.length == 0) {
             return Status(STATE_TEMPFAIL, "dns query error".toSlice());
