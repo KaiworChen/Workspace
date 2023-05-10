@@ -34,9 +34,9 @@ const getPublicKey = async({ domain, selector }) => {
         };
       });
     };
-    async function  test() {
-    const {domain, selector,exponent,modulus} = await getPublicKey({domain:'yahoo.com',selector:'s2048'})
-    publicPKeyOrcle.setPublicKey(domain,selector,exponent,modulus);
-    console.log(domain,selector,exponent,modulus)
-    }
-    test()
+async function  test() { //test解决异步问题
+  const {domain, selector,exponent,modulus} = await getPublicKey({domain:'yahoo.com',selector:'s2048'})
+  publicPKeyOrcle.setPublicKey(domain,selector,exponent,modulus);
+  console.log(domain,selector,exponent,modulus)
+}
+  test()
