@@ -2,7 +2,6 @@
 pragma solidity ^0.8.17;
 import "./utils/Strings.sol";
 import "./Algorithm.sol";
-
 import "./interfaces/IDKIMPublicKeyOracle.sol";
 
 contract DKIM {
@@ -47,47 +46,96 @@ contract DKIM {
         uint l; //规范算法里面的制定长度
     }
 
-    
-    function verify(string memory raw) public view returns (bool success, string memory){
+    function verify(
+        string memory raw
+    )
+        public
+        view
+        returns (
+            bool success,
+            string memory from,
+            string memory to,
+            string memory subject,
+            string memory body
+        )
+    {
         Headers memory headers;
-        strings.slice memory body;
+        strings.slice memory bodys;
         string memory bodyraw;
         Status memory status;
-        (headers, body, status) = parse(raw.toSlice());
-        if (status.state != STATE_SUCCESS)
-            return (false, status.message.toString());
+        string memory From;
+        string memory To;
+        string memory Subject;
 
-        strings.slice memory last = strings.slice(0, 0);       
-            strings.slice memory dkimSig = headers.signatures[0];
+        (headers, bodys, status) = parse(raw.toSlice());
 
-            SigTags memory sigTags;
-            (sigTags, status) = parseSigTags(dkimSig.copy()); //继续切分signatures放到sigTags；
-            if (status.state != STATE_SUCCESS) {
-                //验证切片是否成功且完整
-               last = status.message;
-            }
+        (From, To, Subject) = ParseHeader(headers);//分解header抽取from，to，subject
 
-            (status, bodyraw) = verifyBodyHash(body, sigTags); //验证内容的hash值，判断内容是否更改。
-            if (status.state != STATE_SUCCESS) {
-                last = status.message;
-                
-            }
+        if (status.state != STATE_SUCCESS) {
+            return (false, status.message.toString(), "", "", "");
+        }
 
-            status = verifySignature(headers, sigTags, dkimSig);
-            if (status.state != STATE_SUCCESS) {
-                 last = status.message;
-            } else {
-                last = sigTags.d;
-                return (true, bodyraw);
-            }
-        return(false,status.message.toString());
+        strings.slice memory last = strings.slice(0, 0);
+        strings.slice memory dkimSig = headers.signatures[0];
+
+        SigTags memory sigTags;
+        (sigTags, status) = parseSigTags(dkimSig.copy()); //继续切分signatures放到sigTags；
+        if (status.state != STATE_SUCCESS) {
+            //验证切片是否成功且完整
+            last = status.message;
+            return (false, last.toString(), "", "", "");
+        }
+
+        (status, bodyraw) = verifyBodyHash(bodys, sigTags); //验证内容的hash值，判断内容是否更改。
+        if (status.state != STATE_SUCCESS) {
+            last = status.message;
+            return (false, last.toString(), "", "", "");
+        }
+
+        status = verifySignature(headers, sigTags, dkimSig);
+        if (status.state != STATE_SUCCESS) {
+            last = status.message;
+            return (false, last.toString(), "", "", "");
+        } else {
+            last = sigTags.d;
+            return (true, From, To, Subject, bodyraw);
+        }
     }
 
-    function verifyBodyHash(strings.slice memory body, SigTags memory sigTags)
-        internal
-        pure
-        returns (Status memory, string memory)
-    {
+    function ParseHeader(
+        Headers memory headers
+    ) internal pure returns (string memory, string memory, string memory) {
+        strings.slice memory FromValue;
+        strings.slice memory ToValue;
+        strings.slice memory SubjectValue;
+
+        for (uint i = 0; i <= headers.len; i++) {
+            strings.slice memory From = "from".toSlice();
+            strings.slice memory To = "to".toSlice();
+            strings.slice memory Subject = "subject".toSlice();
+            if (headers.name[i].equals(From)) {
+                FromValue = headers.value[i];
+                FromValue.split("<".toSlice());
+                FromValue = FromValue.split(">".toSlice());
+            } else if (headers.name[i].equals(To)) {
+                ToValue = headers.value[i];
+                ToValue.split(":".toSlice());
+            } else if (headers.name[i].equals(Subject)) {
+                SubjectValue = headers.value[i];
+                SubjectValue.split(":".toSlice());
+            }
+        }
+        return (
+            FromValue.toString(),
+            ToValue.toString(),
+            SubjectValue.toString()
+        );
+    }
+
+    function verifyBodyHash(
+        strings.slice memory body,
+        SigTags memory sigTags
+    ) internal pure returns (Status memory, string memory) {
         //通过body的内容算出hash与bh进行验证。
         if (sigTags.l > 0 && body._len > sigTags.l) body._len = sigTags.l;
         string memory processedBody = processBody(body, sigTags.cBody);
@@ -116,8 +164,10 @@ contract DKIM {
         SigTags memory sigTags,
         strings.slice memory signature
     ) internal view returns (Status memory) {
-       
-        (bytes memory modulus, bytes memory exponent) = oracle.getRSAKey(sigTags.d.toString(), sigTags.s.toString());
+        (bytes memory modulus, bytes memory exponent) = oracle.getRSAKey(
+            sigTags.d.toString(),
+            sigTags.s.toString()
+        );
         //通过body+header一起计算哈希与signuature进行验证。
         if (modulus.length == 0 || exponent.length == 0) {
             return Status(STATE_TEMPFAIL, "dns query error".toSlice());
@@ -151,14 +201,12 @@ contract DKIM {
                 : Status(STATE_PERMFAIL, "signature did not verify".toSlice());
     }
 
-    function parse(strings.slice memory all)
+    function parse(
+        strings.slice memory all
+    )
         internal
         pure
-        returns (
-            Headers memory,
-            strings.slice memory,
-            Status memory
-        )
+        returns (Headers memory, strings.slice memory, Status memory)
     {
         //将一个大的slice进行分割切片（以冒号，换行为分割点），把标题读完后剩下的就是body，
         strings.slice memory crlf = "\r\n".toSlice();
@@ -214,11 +262,9 @@ contract DKIM {
     }
 
     // @dev https://tools.ietf.org/html/rfc6376#section-3.5
-    function parseSigTags(strings.slice memory signature)
-        internal
-        pure
-        returns (SigTags memory sigTags, Status memory status)
-    {
+    function parseSigTags(
+        strings.slice memory signature
+    ) internal pure returns (SigTags memory sigTags, Status memory status) {
         //将signature的内容进行切片，分类放入sigtag中，方便之后的验证。
         strings.slice memory sc = ";".toSlice();
         strings.slice memory eq = "=".toSlice();
@@ -319,11 +365,9 @@ contract DKIM {
         }
     }
 
-    function parseSigHTag(strings.slice memory value)
-        internal
-        pure
-        returns (strings.slice[] memory, bool)
-    {
+    function parseSigHTag(
+        strings.slice memory value
+    ) internal pure returns (strings.slice[] memory, bool) {
         strings.slice memory colon = ":".toSlice();
         strings.slice memory from = "from".toSlice();
         strings.slice[] memory list = new strings.slice[](
@@ -423,11 +467,10 @@ contract DKIM {
     }
 
     // utils
-    function getHeader(Headers memory headers, strings.slice memory headerName)
-        internal
-        pure
-        returns (strings.slice memory)
-    {
+    function getHeader(
+        Headers memory headers,
+        strings.slice memory headerName
+    ) internal pure returns (strings.slice memory) {
         //用headername关键字例如b 、bh 等匹配找到对应的header.value
         for (uint i = 0; i < headers.len; i++) {
             if (headers.name[i].equals(headerName))
@@ -436,11 +479,9 @@ contract DKIM {
         return strings.slice(0, 0);
     }
 
-    function toLowercase(string memory str)
-        internal
-        pure
-        returns (string memory)
-    {
+    function toLowercase(
+        string memory str
+    ) internal pure returns (string memory) {
         //大写变小写
         bytes memory bStr = bytes(str);
         for (uint i = 0; i < bStr.length; i++) {
@@ -460,11 +501,9 @@ contract DKIM {
         return string(bStr);
     }
 
-    function trim(strings.slice memory self)
-        internal
-        pure
-        returns (strings.slice memory)
-    {
+    function trim(
+        strings.slice memory self
+    ) internal pure returns (strings.slice memory) {
         //trim：修剪 除去开头和结尾的空格、制表符、换行符
         strings.slice memory sp = "\x20".toSlice();
         strings.slice memory tab = "\x09".toSlice();
@@ -486,11 +525,9 @@ contract DKIM {
         return self;
     }
 
-    function removeSPAtEndOfLines(strings.slice memory value)
-        internal
-        pure
-        returns (strings.slice memory)
-    {
+    function removeSPAtEndOfLines(
+        strings.slice memory value
+    ) internal pure returns (strings.slice memory) {
         //去除末尾的空格
         if (!value.contains("\x20\r\n".toSlice())) return value;
         strings.slice memory sp = "\x20".toSlice();
@@ -506,11 +543,9 @@ contract DKIM {
         return crlf.join(parts).toSlice();
     }
 
-    function removeWSPSequences(strings.slice memory value)
-        internal
-        pure
-        returns (strings.slice memory)
-    {
+    function removeWSPSequences(
+        strings.slice memory value
+    ) internal pure returns (strings.slice memory) {
         //去除空格和制表符
         bool containsTab = value.contains("\x09".toSlice()); //\x09制表符
         if (!value.contains("\x20\x20".toSlice()) && !containsTab) return value; // \x20空格
@@ -524,11 +559,9 @@ contract DKIM {
         return joinNoEmpty(sp, parts).toSlice();
     }
 
-    function ignoreEmptyLineAtEnd(strings.slice memory value)
-        internal
-        pure
-        returns (strings.slice memory)
-    {
+    function ignoreEmptyLineAtEnd(
+        strings.slice memory value
+    ) internal pure returns (strings.slice memory) {
         //无视最后的换行符
         strings.slice memory emptyLines = "\r\n\r\n".toSlice();
         while (value.endsWith(emptyLines)) {
@@ -537,11 +570,10 @@ contract DKIM {
         return value;
     }
 
-    function unfoldContinuationLines(strings.slice memory value, bool isTrim)
-        internal
-        pure
-        returns (strings.slice memory)
-    {
+    function unfoldContinuationLines(
+        strings.slice memory value,
+        bool isTrim
+    ) internal pure returns (strings.slice memory) {
         //删除换行符
         strings.slice memory crlf = "\r\n".toSlice();
         uint count = value.count(crlf); //count：在value中一共包含几个crlf 具体几个赋值给count；
@@ -600,11 +632,7 @@ contract DKIM {
         return ret;
     }
 
-    function memcpy(
-        uint dest,
-        uint src,
-        uint len
-    ) private pure {
+    function memcpy(uint dest, uint src, uint len) private pure {
         // Copy word-length chunks while possible
         //复制内存块，给一个地址和长度进行复制
         for (; len >= 32; len -= 32) {
@@ -616,7 +644,7 @@ contract DKIM {
         }
 
         // Copy remaining bytes
-        uint mask = 256**(32 - len) - 1;
+        uint mask = 256 ** (32 - len) - 1;
         assembly {
             let srcpart := and(mload(src), not(mask))
             let destpart := and(mload(dest), mask)
